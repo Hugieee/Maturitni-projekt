@@ -1,14 +1,13 @@
 
 #include "WiFiEsp.h"
 #include "secrets.h"
-#include "ThingSpeak.h" // always include thingspeak header file after other header files and custom macros
+#include "ThingSpeak.h" 
 
-char ssid[] = SECRET_SSID;    //  your network SSID (name) 
-char pass[] = SECRET_PASS;   // your network password
-int keyIndex = 0;            // your network key Index number (needed only for WEP)
+char ssid[] = robotika;    //  jmeno wifi
+char pass[] = opravdunemuzuprozradit;   // heslo
+int keyIndex = 0;           
 WiFiEspClient  client;
 
-// Emulate Serial3 on pins 6/7 if not present
 #ifndef HAVE_HWSerial3
 //#include "SoftwareSerial.h"
 //SoftwareSerial Serial3(6, 7); // RX, TX
