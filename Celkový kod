@@ -1,0 +1,121 @@
+#include <Keypad.h>
+#include <Stepper.h>
+#include <Nokia5110.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define RST 49
+#define CE 47
+#define DC 45
+#define DIN 43
+#define CLK 41
+
+LCDnokia5110 lcd(RST, CE, DC, DIN, CLK);
+
+#define SDA_PIN 6
+#define RST_PIN 7
+
+const byte ROWS = 4;
+const byte COLS = 3;
+
+byte rowPins[ROWS] = {5, 4, 3, 2};
+byte colPins[COLS] = {44, 46, 48};
+
+char hexaKeys[ROWS][COLS] = {
+  {'1', '2', '3'},
+  {'4', '5', '6'},
+  {'7', '8', '9'},
+  {'*', '0', '#'}
+};
+
+double stepsPerRevolution = 2048;
+int vyber;
+
+Stepper steppers[] = {Stepper (stepsPerRevolution, 28, 24, 26, 22), Stepper (stepsPerRevolution, 29, 25, 27, 23), Stepper (stepsPerRevolution, 37, 33, 35, 31), Stepper (stepsPerRevolution, 34, 30, 32, 38)};
+Keypad klavesnice = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
+
+MFRC522 rfid(SDA_PIN, RST_PIN);
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+
+  lcd.LcdInitialise();
+  lcd.LcdClear();
+  lcd.CharSpace = 1;
+  lcd.LcdString("Start");
+
+  for (int i = 0; i < sizeof(steppers) / sizeof(Stepper); i++) {
+    steppers[i].setSpeed(15);
+  }
+}
+
+void loop() {
+  char stisknutyZnak = klavesnice.getKey();
+  if (stisknutyZnak) {
+  Serial.println(stisknutyZnak);
+
+    if (stisknutyZnak != '*' && stisknutyZnak != '#' && vyber == NULL) {
+      vyber = String(stisknutyZnak).toInt();
+    } else if (stisknutyZnak == '#') {
+      vyber = NULL;
+    } else if (stisknutyZnak == '*') {
+      if (vyber == NULL || vyber == 0 || vyber > 4) {
+        Serial.println("Neplatný výběr");
+         lcd.LcdClear();
+        lcd.GotoXY(0,0);
+        lcd.LcdString("Neplatny vyber");
+        vyber = NULL;
+      } else {
+        int cas = millis();
+        while (!rfid.PICC_IsNewCardPresent()) {
+          int odpocet = millis() - cas;
+          if (odpocet < 3000) {
+            Serial.println("Přiložte kartu za: " + String(3 - (odpocet / 1000)));
+             lcd.LcdClear();
+             lcd.GotoXY(0,0);
+             lcd.LcdString("Cteni karty");
+          } else {
+            Serial.println("Čtení karty");
+             lcd.LcdClear();
+             lcd.GotoXY(0,0);
+             lcd.LcdString("Cteni karty");
+            
+          }
+        }
+        if (!rfid.PICC_ReadCardSerial()) {
+          return;
+        }
+        MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+        if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI && piccType != MFRC522::PICC_TYPE_MIFARE_1K && piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+          Serial.println("Tento RFID tag neni podporovany (typ MIFARE Classic).");
+           lcd.LcdClear();
+           lcd.GotoXY(0,0);
+          lcd.LcdString("Tento RFID tag neni podporovany (typ MIFARE Classic).");
+          return;
+        }
+        if (rfid.uid.uidByte[0] == 0x53 & rfid.uid.uidByte[1] == 0x6C & rfid.uid.uidByte[2] == 0xAB & rfid.uid.uidByte[3] == 0x17) {
+          Serial.println("Detekována platná karta!");
+           lcd.LcdClear();
+           lcd.GotoXY(0,0);
+          lcd.LcdString("Detekovana    platna karta                ");
+          
+          lcd.LcdString("Vyckejte");
+          
+          steppers[vyber - 1].step(-2000);
+        } else if (rfid.uid.uidByte[0] == 0x45 & rfid.uid.uidByte[1] == 0x05 & rfid.uid.uidByte[2] == 0xA1 & rfid.uid.uidByte[3] == 0x30) {
+          Serial.println("Detekovana neplatna karta");
+           lcd.LcdClear();
+           lcd.GotoXY(0,0);
+          lcd.LcdString("Nedostatek    penez na karte");
+        } else {
+          Serial.println("Detekována neznámá karta");
+        }
+        Serial.println();
+        vyber = NULL;
+      }
+    }
+    Serial.println("Výběr: " + String(vyber));
+  }
+}
